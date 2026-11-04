@@ -92,6 +92,18 @@ Assert-HttpCode "GET /proxy 返回 405" {
     Invoke-WebRequest -UseBasicParsing "$Base/proxy" -Method GET
 } 405
 
+# ---- 用例 8（第4步新增）: 无 key 打 /stream → 401 ----
+Assert-HttpCode "POST /stream 无 Authorization 头返回 401" {
+    Invoke-WebRequest -UseBasicParsing -Method POST "$Base/stream" -Body '{}' -ContentType "application/json"
+} 401
+
+# ---- 用例 9（第4步新增）: 合法 key 打 /stream → SSE 内容逐条透传 ----
+# 用 curl.exe -N 才能真正观察流式；检查 14 条 data 是否齐全、前缀没被叠加
+$streamOut = & curl.exe -N -s -X POST "$Base/stream" -H "Authorization: Bearer $ValidKey" -d '{}'
+$dataLines = @($streamOut | Where-Object { $_ -match '^data: \d+$' })
+Check "SSE 转发收到 14 条 data 消息" ($dataLines.Count -eq 14) "实际: $($dataLines.Count) 条"
+Check "SSE 格式干净(无 data: data: 叠加)" (-not ($streamOut -match 'data: data:')) "发现畸形行"
+
 # ---- 汇总 ----
 Write-Host "`n===== 测试结束: 通过 $Pass / 失败 $Fail =====" -ForegroundColor Cyan
 if ($Fail -gt 0) { exit 1 } else { exit 0 }
