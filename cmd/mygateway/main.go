@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-var client = &http.Client{Timeout: 10 * time.Second}
+var transport = &http.Transport{
+	ResponseHeaderTimeout: 5 * time.Second,
+}
+var client = &http.Client{Transport: transport}
 var cfg *config.Config
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
@@ -125,8 +128,8 @@ func main() {
 
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.Handle("POST /proxy", middleware.AuthMiddleware(cfg, http.HandlerFunc(proxyHandler)))
-	mux.Handle("POST /stream", middleware.AuthMiddleware(cfg, http.HandlerFunc(streamHandler)))
+	mux.Handle("POST /proxy", middleware.RateLimit(middleware.AuthMiddleware(cfg, http.HandlerFunc(proxyHandler))))
+	mux.Handle("POST /stream", middleware.RateLimit(middleware.AuthMiddleware(cfg, http.HandlerFunc(streamHandler))))
 
 	log.Printf("MyGateway 启动，监听 http://localhost%s", cfg.Port)
 
