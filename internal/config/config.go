@@ -7,12 +7,17 @@ import (
 )
 
 type Config struct {
-	Port      string `json:"port"`
-	BaseURL   string `json:"base_url"`
-	StreamURL string `json:"stream_url"`
-	APIKey    string `json:"api_key"`
-	RPS       int    `json:"rps"`
-	Burst     int    `json:"burst"`
+	Port      string   `json:"port"`
+	BaseURL   string   `json:"base_url"`
+	StreamURL string   `json:"stream_url"`
+	APIKeys   []APIKey `json:"api_keys"`
+}
+
+type APIKey struct {
+	Key   string `json:"key"`
+	Name  string `json:"name"`
+	RPS   int    `json:"rps"`
+	Burst int    `json:"burst"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -36,15 +41,6 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.StreamURL == "" {
 		return fmt.Errorf("stream URL is required")
-	}
-	if cfg.APIKey == "" {
-		return fmt.Errorf("API key is required")
-	}
-	if cfg.RPS <= 0 {
-		return fmt.Errorf("RPS must be a non-negative integer")
-	}
-	if cfg.Burst <= 0 {
-		return fmt.Errorf("burst must be a non-negative integer")
 	}
 	return nil
 }

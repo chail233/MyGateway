@@ -1,6 +1,7 @@
 package main
 
 import (
+	"MyGateway/internal/clients"
 	"MyGateway/internal/config"
 	"MyGateway/internal/middleware"
 	"bufio"
@@ -121,7 +122,9 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	configPath := flag.String("config", "./config.json", "Path to the config file")
 	flag.Parse()
+
 	var err error
+
 	cfg, err = config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Error loading config: %v", err)
@@ -131,14 +134,17 @@ func main() {
 		log.Fatalf("Config validation error: %v", err)
 	}
 
-	limiter = rate.NewLimiter(rate.Limit(cfg.RPS), cfg.Burst)
+	registry := make(map[string]*clients.Client, len(cfg.APIKeys))
+	for _, k := range cfg.APIKeys {
+		registry[k.Key] = &clients.Client{Name: k.Name, Limiter: rate.NewLimiter(rate.Limit(k.RPS), k.Burst)}
+	}
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.Handle("POST /proxy", middleware.Chain(http.HandlerFunc(proxyHandler), middleware.AuthMiddleware(cfg), middleware.RateLimit(limiter)))
-	mux.Handle("POST /stream", middleware.Chain(http.HandlerFunc(streamHandler), middleware.AuthMiddleware(cfg), middleware.RateLimit(limiter)))
+	mux.Handle("POST /proxy", middleware.Chain(http.HandlerFunc(proxyHandler), middleware.AuthAndLimit(registry)))
+	mux.Handle("POST /stream", middleware.Chain(http.HandlerFunc(streamHandler), middleware.AuthAndLimit(registry)))
 
 	log.Printf("MyGateway 启动，监听 http://localhost%s", cfg.Port)
 
