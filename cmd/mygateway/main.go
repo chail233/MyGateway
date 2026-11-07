@@ -137,8 +137,8 @@ func main() {
 
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.Handle("POST /proxy", middleware.AuthMiddleware(cfg, middleware.RateLimit(limiter, http.HandlerFunc(proxyHandler))))
-	mux.Handle("POST /stream", middleware.AuthMiddleware(cfg, middleware.RateLimit(limiter, http.HandlerFunc(streamHandler))))
+	mux.Handle("POST /proxy", middleware.Chain(http.HandlerFunc(proxyHandler), middleware.AuthMiddleware(cfg), middleware.RateLimit(limiter)))
+	mux.Handle("POST /stream", middleware.Chain(http.HandlerFunc(streamHandler), middleware.AuthMiddleware(cfg), middleware.RateLimit(limiter)))
 
 	log.Printf("MyGateway 启动，监听 http://localhost%s", cfg.Port)
 
