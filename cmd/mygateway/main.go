@@ -20,7 +20,6 @@ var transport = &http.Transport{
 	ResponseHeaderTimeout: 5 * time.Second,
 }
 var client = &http.Client{Transport: transport}
-var limiter *rate.Limiter
 var cfg *config.Config
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
