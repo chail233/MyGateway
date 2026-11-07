@@ -11,12 +11,15 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 var transport = &http.Transport{
 	ResponseHeaderTimeout: 5 * time.Second,
 }
 var client = &http.Client{Transport: transport}
+var limiter *rate.Limiter
 var cfg *config.Config
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +80,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		"http://127.0.0.1:5001/stream", bytes.NewReader(body))
+		cfg.StreamURL, bytes.NewReader(body))
 	if err != nil {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
 		return
@@ -123,13 +126,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error loading config: %v", err)
 	}
+	err = cfg.Validate()
+	if err != nil {
+		log.Fatalf("Config validation error: %v", err)
+	}
+
+	limiter = rate.NewLimiter(rate.Limit(cfg.RPS), cfg.Burst)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.Handle("POST /proxy", middleware.RateLimit(middleware.AuthMiddleware(cfg, http.HandlerFunc(proxyHandler))))
-	mux.Handle("POST /stream", middleware.RateLimit(middleware.AuthMiddleware(cfg, http.HandlerFunc(streamHandler))))
+	mux.Handle("POST /proxy", middleware.AuthMiddleware(cfg, middleware.RateLimit(limiter, http.HandlerFunc(proxyHandler))))
+	mux.Handle("POST /stream", middleware.AuthMiddleware(cfg, middleware.RateLimit(limiter, http.HandlerFunc(streamHandler))))
 
 	log.Printf("MyGateway 启动，监听 http://localhost%s", cfg.Port)
 
