@@ -1,27 +1,17 @@
 package config
 
 import (
+	"MyGateway/internal/clients"
 	"encoding/json"
 	"fmt"
 	"os"
 )
 
 type Config struct {
-	Port      string   `json:"port"`
-	BaseURL   string   `json:"base_url"`
-	StreamURL string   `json:"stream_url"`
-	APIKeys   []APIKey `json:"api_keys"`
-}
-
-type APIKey struct {
-	Key      string     `json:"key"`
-	Name     string     `json:"name"`
-	Upstream []Upstream `json:"upstream"`
-}
-
-type Upstream struct {
-	BaseURL string `json:"base_url"`
-	Key     string `json:"key"`
+	Port      string           `json:"port"`
+	BaseURL   string           `json:"base_url"`
+	StreamURL string           `json:"stream_url"`
+	APIKeys   []clients.APIKey `json:"api_keys"`
 }
 
 func LoadConfig(path string) (*Config, error) {
