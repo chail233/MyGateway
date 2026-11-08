@@ -42,5 +42,19 @@ func (cfg *Config) Validate() error {
 	if cfg.StreamURL == "" {
 		return fmt.Errorf("stream URL is required")
 	}
+	for _, key := range cfg.APIKeys {
+		if key.Key == "" {
+			return fmt.Errorf("API key is required")
+		}
+		if key.Name == "" {
+			return fmt.Errorf("API key name is required")
+		}
+		if key.RPS == 0 {
+			return fmt.Errorf("API key RPS is required")
+		}
+		if key.Burst == 0 {
+			return fmt.Errorf("API key burst is required")
+		}
+	}
 	return nil
 }

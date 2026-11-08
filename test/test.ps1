@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'   # 关闭进度条刷屏
 $cfgObj = Get-Content -Raw -Encoding UTF8 ./config.json | ConvertFrom-Json
 $port = $cfgObj.port -replace ':', ''
 $Base = "http://localhost:$port"
-$ValidKey = $cfgObj.api_key
+$ValidKey = $cfgObj.api_keys[0].key
 
 $script:Pass = 0
 $script:Fail = 0

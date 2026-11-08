@@ -1,13 +1,16 @@
 # Burst-load helper: fire N parallel POSTs at /proxy, count status codes.
-# Run from project root:  powershell -ExecutionPolicy Bypass -File test\burst.ps1
+# Run from project root:  powershell -ExecutionPolicy Bypass -File test\burst.ps1 [-Key 191910] [-N 8]
 # Rate limit expected: ~2/s refill, burst 3 -> some 429 will appear.
+param(
+    [string]$Key = "",
+    [int]$N = 8
+)
 
 $cfgObj = Get-Content -Raw -Encoding UTF8 ./config.json | ConvertFrom-Json
 $port = $cfgObj.port -replace ':', ''
 $Base = "http://localhost:$port"
-$Key = $cfgObj.api_key
-
-$N = 8
+if ($Key -eq "") { $Key = $cfgObj.api_keys[0].key }
+Write-Host "Target client key: $Key"
 $jobs = 1..$N | ForEach-Object {
     Start-Job -ScriptBlock {
         param($b, $k)
