@@ -14,8 +14,14 @@ type Config struct {
 }
 
 type APIKey struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	Key      string     `json:"key"`
+	Name     string     `json:"name"`
+	Upstream []Upstream `json:"upstream"`
+}
+
+type Upstream struct {
+	BaseURL string `json:"base_url"`
+	Key     string `json:"key"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -46,6 +52,14 @@ func (cfg *Config) Validate() error {
 		}
 		if key.Name == "" {
 			return fmt.Errorf("API key name is required")
+		}
+		for _, upstream := range key.Upstream {
+			if upstream.BaseURL == "" {
+				return fmt.Errorf("upstream base URL is required")
+			}
+			if upstream.Key == "" {
+				return fmt.Errorf("upstream key is required")
+			}
 		}
 	}
 	return nil
