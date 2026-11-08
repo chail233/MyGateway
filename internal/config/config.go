@@ -14,10 +14,8 @@ type Config struct {
 }
 
 type APIKey struct {
-	Key   string `json:"key"`
-	Name  string `json:"name"`
-	RPS   int    `json:"rps"`
-	Burst int    `json:"burst"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -48,12 +46,6 @@ func (cfg *Config) Validate() error {
 		}
 		if key.Name == "" {
 			return fmt.Errorf("API key name is required")
-		}
-		if key.RPS == 0 {
-			return fmt.Errorf("API key RPS is required")
-		}
-		if key.Burst == 0 {
-			return fmt.Errorf("API key burst is required")
 		}
 	}
 	return nil

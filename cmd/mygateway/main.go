@@ -12,8 +12,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 var transport = &http.Transport{
@@ -135,15 +133,15 @@ func main() {
 
 	registry := make(map[string]*clients.Client, len(cfg.APIKeys))
 	for _, k := range cfg.APIKeys {
-		registry[k.Key] = &clients.Client{Name: k.Name, Limiter: rate.NewLimiter(rate.Limit(k.RPS), k.Burst)}
+		registry[k.Key] = &clients.Client{Name: k.Name}
 	}
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.Handle("POST /proxy", middleware.Chain(http.HandlerFunc(proxyHandler), middleware.AuthAndLimit(registry)))
-	mux.Handle("POST /stream", middleware.Chain(http.HandlerFunc(streamHandler), middleware.AuthAndLimit(registry)))
+	mux.Handle("POST /proxy", middleware.Chain(http.HandlerFunc(proxyHandler), middleware.Auth(registry)))
+	mux.Handle("POST /stream", middleware.Chain(http.HandlerFunc(streamHandler), middleware.Auth(registry)))
 
 	log.Printf("MyGateway 启动，监听 http://localhost%s", cfg.Port)
 

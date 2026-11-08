@@ -1,9 +1,0 @@
-{
-  "port": ":5000",
-  "base_url": "http://127.0.0.1:5001/echo",
-  "stream_url": "http://127.0.0.1:5001/stream",
-  "api_keys": [
-    { "key": "114514", "name": "alice", "rps": 1000, "burst": 1000 },
-    { "key": "191910", "name": "bob",   "rps": 1000, "burst": 1000 }
-  ]
-}

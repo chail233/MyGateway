@@ -2,14 +2,13 @@
 
 一个用于学习 Go 网络服务开发的**模型 API 网关**（入门项目）。
 
-它在客户端与上游模型服务之间做三件事：**认人**（API Key 鉴权）、**管额度**（按客户限流）、**转话**（把请求转发给上游，支持普通响应与 SSE 流式响应）。
+它在客户端与上游模型服务之间做两件事：**认人**（API Key 鉴权）、**转话**（把请求转发给上游，支持普通响应与 SSE 流式响应）。
 
-> 纯标准库实现，仅一个第三方依赖 `golang.org/x/time/rate`（令牌桶）。
+> 纯标准库实现，零第三方依赖。
 
 ## 功能
 
-- **API Key 鉴权**：`Authorization: Bearer <key>`，多 Key 注册表，`crypto/subtle` 常量时间比较防计时侧信道
-- **按客户限流**：每个 Key 独立令牌桶（`rps` 补充速率 + `burst` 突发容量），超限返回 `429` 并带 `Retry-After`
+- **API Key 鉴权**：`Authorization: Bearer <key>`，多 Key 注册表，非法或未知 Key 一律 `401`
 - **请求转发**：`/proxy` 透传请求体与上游状态码
 - **SSE 流式转发**：`/stream` 逐块读取上游事件流并即时 `Flush`，实现"逐字输出"效果
 - **配置驱动**：JSON 配置文件 + `-config` 启动参数；启动时校验配置（fail-fast）
@@ -24,12 +23,10 @@ MyGateway/
 │   └── mockstream/         # 本地 mock 上游（/stream SSE + /echo 回声）
 ├── internal/
 │   ├── config/             # 配置结构、加载与校验
-│   ├── clients/            # 客户注册表元素（名称 + 独立限流器）
-│   └── middleware/         # Chain 组合器 + 鉴权限流中间件
+│   ├── clients/            # 客户注册表元素（名称）
+│   └── middleware/         # Chain 组合器 + 鉴权中间件
 ├── test/
-│   ├── test.ps1            # 回归测试（13 个用例）
-│   ├── burst.ps1           # 并发压测（可指定客户与并发数）
-│   └── config.test.json    # 测试专用宽松配置（限流拉满）
+│   └── test.ps1            # 回归测试（13 个用例）
 ├── config.example.json     # 配置示例
 └── config.json             # 实际配置（已被 .gitignore 忽略）
 ```
@@ -65,47 +62,41 @@ curl.exe -N -X POST http://localhost:5000/stream -H "Authorization: Bearer 11451
 
 ## 接口
 
-| 方法 | 路径      | 鉴权 | 限流 | 说明                         |
-|------|-----------|:----:|:----:|------------------------------|
-| GET  | `/health` | 否   | 否   | 健康检查                     |
-| GET  | `/hello`  | 否   | 否   | 示例接口                     |
-| POST | `/proxy`  | 是   | 是   | 普通转发，透传状态码与响应体 |
-| POST | `/stream` | 是   | 是   | SSE 流式转发                 |
+| 方法 | 路径      | 鉴权 | 说明                         |
+|------|-----------|:----:|------------------------------|
+| GET  | `/health` | 否   | 健康检查                     |
+| GET  | `/hello`  | 否   | 示例接口                     |
+| POST | `/proxy`  | 是   | 普通转发，透传状态码与响应体 |
+| POST | `/stream` | 是   | SSE 流式转发                 |
 
-错误约定：缺少/错误 Key → `401`；超出限额 → `429`（含 `Retry-After: 1`）；上游不可达 → `502`。
+错误约定：缺少/错误 Key → `401`；上游不可达 → `502`。
 
 ## 配置字段
 
-| 字段         | 类型     | 说明                                   |
-|--------------|----------|----------------------------------------|
-| `port`       | string   | 监听地址，如 `":5000"`                 |
-| `base_url`   | string   | `/proxy` 的上游地址                    |
-| `stream_url` | string   | `/stream` 的 SSE 上游地址              |
-| `api_keys`   | array    | 客户列表，每项含 `key`/`name`/`rps`/`burst` |
+| 字段         | 类型     | 说明                                       |
+|--------------|----------|--------------------------------------------|
+| `port`       | string   | 监听地址，如 `":5000"`                      |
+| `base_url`   | string   | `/proxy` 的上游地址                        |
+| `stream_url` | string   | `/stream` 的 SSE 上游地址                  |
+| `api_keys`   | array    | 客户列表，每项含 `key`/`name`              |
 
-`rps` 是令牌补充速率（每秒放行数），`burst` 是突发容量（桶大小）。启动时任一字段非法，网关会打印原因并直接退出。
+启动时任一字段非法，网关会打印原因并直接退出。
 
 ## 测试
 
-两个脚本都在**项目根目录**运行（脚本内相对路径依赖工作目录）：
+脚本在**项目根目录**运行（脚本内相对路径依赖工作目录）：
 
 ```powershell
-# 回归测试：用宽松配置启动网关后执行
-go run ./cmd/mygateway -config test/config.test.json
+# 先启动网关，再执行回归测试
+go run ./cmd/mygateway -config config.json
 powershell -ExecutionPolicy Bypass -File .\test\test.ps1
-
-# 并发压测：用默认（严格）配置启动网关后执行
-powershell -ExecutionPolicy Bypass -File .\test\burst.ps1 -Key 114514 -N 8
-powershell -ExecutionPolicy Bypass -File .\test\burst.ps1 -Key 191910 -N 8
 ```
-
-预期：`alice`（rps=2/burst=3）会拿到一部分 `429`；`bob`（rps=10/burst=20）在 8 并发下全部 `200` —— 限流按客户隔离。
 
 > 提示：`.ps1` 文件含中文时需保存为 **UTF-8 with BOM**，否则 Windows PowerShell 5.1 会因编码问题报出误导性的语法错误。
 
 ## 设计要点
 
-- **中间件链**：`Chain(handler, mw1, mw2...)` 按书写顺序组合，鉴权先于限流（先确认身份，再扣该身份的额度）
+- **中间件链**：`Chain(handler, mw1, mw2...)` 按书写顺序组合，后续新增的中间件只需插入链中，handler 无需知情
 - **注册表运行期只读**：客户表在启动时构建完毕，之后只读，因此无需加锁
 - **流式转发三要素**：设置 `text/event-stream` 头、逐行读写、每块 `Flush`
 - **超时策略**：不使用 `Client.Timeout` 一刀切；改用 `Transport.ResponseHeaderTimeout` 限制"等待响应头"的时间，流建立后不被打断
