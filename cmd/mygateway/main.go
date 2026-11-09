@@ -40,7 +40,11 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gatewayKey, _ := r.Context().Value("client_key").(string)
-	client := registry[gatewayKey]
+	client, ok := registry[gatewayKey]
+	if !ok {
+		http.Error(w, "Unknown client", http.StatusUnauthorized)
+		return
+	}
 	if len(client.Upstream) == 0 {
 		http.Error(w, "No upstream configured", http.StatusInternalServerError)
 		return
