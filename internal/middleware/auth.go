@@ -2,25 +2,25 @@ package middleware
 
 import (
 	"MyGateway/internal/clients"
+	"MyGateway/internal/utils"
+	"context"
 	"net/http"
-	"strings"
 )
 
 func Auth(registry map[string]*clients.Client) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth := r.Header.Get("Authorization")
-			if !strings.HasPrefix(auth, "Bearer ") {
-				http.Error(w, "Invalid Authorization header", http.StatusUnauthorized)
+			key, err := utils.GetAuthKey(r)
+			if err != nil {
+				http.Error(w, "Invalid client", http.StatusUnauthorized)
 				return
 			}
-			key := strings.TrimPrefix(auth, "Bearer ")
 			if _, ok := registry[key]; !ok {
 				http.Error(w, "Invalid client", http.StatusUnauthorized)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), "client_key", key)))
 		})
 	}
 }

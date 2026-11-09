@@ -4,24 +4,15 @@ import (
 	"MyGateway/internal/clients"
 	"MyGateway/internal/config"
 	"MyGateway/internal/middleware"
-	"bufio"
-	"bytes"
+	"MyGateway/internal/proxy"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 )
 
-const COMPLETION_PATH = "/v1/chat/completions"
-
-var transport = &http.Transport{
-	ResponseHeaderTimeout: 5 * time.Second,
-}
-var gatewayClient = &http.Client{Transport: transport}
+var gatewayClient = &http.Client{}
 var cfg *config.Config
 var registry map[string]*clients.Client
 
@@ -45,30 +36,21 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func completionHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		http.Error(w, "Error reading request body", http.StatusBadRequest)
 		return
 	}
-	gatewayKey := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	gatewayKey, _ := r.Context().Value("client_key").(string)
 	client := registry[gatewayKey]
 	if len(client.Upstream) == 0 {
 		http.Error(w, "No upstream configured", http.StatusInternalServerError)
 		return
 	}
-	completionURL, err := url.JoinPath(client.Upstream[0].BaseURL, COMPLETION_PATH)
+
+	req, err := proxy.NewCompletionRequest(client.Upstream[0], r, body)
 	if err != nil {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		completionURL, bytes.NewReader(body))
-	if err != nil {
-		http.Error(w, "Error creating request", http.StatusInternalServerError)
-		return
-	}
-	req.Header = r.Header.Clone()
-	req.Header.Del("Accept-Encoding")
-	req.Header.Set("Authorization", "Bearer "+client.Upstream[0].Key)
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := gatewayClient.Do(req)
 	if err != nil {
 		http.Error(w, "Error making request", http.StatusBadGateway)
@@ -76,46 +58,10 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "application/json" {
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			http.Error(w, "Error reading response body", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(resp.StatusCode)
-		_, err = w.Write(respBody)
-		if err != nil {
-			log.Printf("Error writing response body: %v", err)
-			return
-		}
-	} else if contentType == "text/event-stream" {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		flusher := http.NewResponseController(w)
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			_, err := fmt.Fprintf(w, "%s\n\n", line)
-			if err != nil {
-				http.Error(w, "Error writing to client", http.StatusInternalServerError)
-				return
-			}
-			err = flusher.Flush()
-			if err != nil {
-				http.Error(w, "Error flushing response", http.StatusInternalServerError)
-				return
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			http.Error(w, "Error reading response body", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		http.Error(w, "Unsupported content type", http.StatusInternalServerError)
-		return
+
+	err = proxy.WriteCompletionResponse(w, resp)
+	if err != nil {
+		log.Printf("Error writing response: %v", err)
 	}
 }
 

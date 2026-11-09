@@ -30,12 +30,6 @@ func (cfg *Config) Validate() error {
 	if cfg.Port == "" {
 		return fmt.Errorf("port is required")
 	}
-	if cfg.BaseURL == "" {
-		return fmt.Errorf("base URL is required")
-	}
-	if cfg.StreamURL == "" {
-		return fmt.Errorf("stream URL is required")
-	}
 	for _, key := range cfg.APIKeys {
 		if key.Key == "" {
 			return fmt.Errorf("API key is required")
