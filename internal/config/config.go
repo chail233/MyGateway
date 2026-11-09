@@ -8,10 +8,8 @@ import (
 )
 
 type Config struct {
-	Port      string           `json:"port"`
-	BaseURL   string           `json:"base_url"`
-	StreamURL string           `json:"stream_url"`
-	APIKeys   []clients.APIKey `json:"api_keys"`
+	Port    string           `json:"port"`
+	APIKeys []clients.APIKey `json:"api_keys"`
 }
 
 func LoadConfig(path string) (*Config, error) {
