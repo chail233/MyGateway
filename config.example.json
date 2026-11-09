@@ -1,20 +1,24 @@
 {
   "port": ":5000",
-  "base_url": "http://127.0.0.1:5001/echo",
-  "stream_url": "http://127.0.0.1:5001/stream",
   "api_keys": [
     {
       "key": "114514",
       "name": "alice",
       "upstream": [
-        { "base_url": "http://127.0.0.1:5001", "key": "sk-mock-alice" }
+        {
+          "base_url": "http://127.0.0.1:5001",
+          "key": "sk-mock-alice"
+        }
       ]
     },
     {
       "key": "191910",
       "name": "bob",
       "upstream": [
-        { "base_url": "http://127.0.0.1:5001", "key": "sk-mock-bob" }
+        {
+          "base_url": "http://127.0.0.1:5001",
+          "key": "sk-mock-bob"
+        }
       ]
     }
   ]
