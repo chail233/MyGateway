@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-var COMPLETION_PATH = "/v1/chat/completions"
+const COMPLETION_PATH = "/v1/chat/completions"
 
 var transport = &http.Transport{
 	ResponseHeaderTimeout: 5 * time.Second,
@@ -50,6 +50,10 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	gatewayKey := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	client := registry[gatewayKey]
+	if len(client.Upstream) == 0 {
+		http.Error(w, "No upstream configured", http.StatusInternalServerError)
+		return
+	}
 	completionURL, err := url.JoinPath(client.Upstream[0].BaseURL, COMPLETION_PATH)
 	if err != nil {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
@@ -61,6 +65,8 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
 		return
 	}
+	req.Header = r.Header.Clone()
+	req.Header.Del("Accept-Encoding")
 	req.Header.Set("Authorization", "Bearer "+client.Upstream[0].Key)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := gatewayClient.Do(req)
@@ -72,20 +78,19 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "application/json" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(resp.StatusCode)
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			http.Error(w, "Error reading response body", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
 		_, err = w.Write(respBody)
 		if err != nil {
 			log.Printf("Error writing response body: %v", err)
 			return
 		}
-	}
-	if contentType == "text/event-stream" {
+	} else if contentType == "text/event-stream" {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -108,6 +113,9 @@ func completionHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error reading response body", http.StatusInternalServerError)
 			return
 		}
+	} else {
+		http.Error(w, "Unsupported content type", http.StatusInternalServerError)
+		return
 	}
 }
 

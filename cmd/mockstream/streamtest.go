@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -130,13 +131,14 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		writeChatStream(w, model, prompt)
 		return
 	}
-	writeChatJSON(w, model, prompt)
+	// 模拟真实上游/CDN 的行为：客户端声明 Accept-Encoding: gzip 时就压缩响应体。
+	// 流式分支不做压缩（SSE 实际也很少压缩）。
+	useGzip := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+	writeChatJSON(w, model, prompt, useGzip)
 }
 
-func writeChatJSON(w http.ResponseWriter, model, prompt string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+func writeChatJSON(w http.ResponseWriter, model, prompt string, useGzip bool) {
+	payload, err := json.Marshal(map[string]any{
 		"id":      chatID(),
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
@@ -148,6 +150,29 @@ func writeChatJSON(w http.ResponseWriter, model, prompt string) {
 		}},
 		"usage": map[string]any{"prompt_tokens": 9, "completion_tokens": 12, "total_tokens": 21},
 	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "server_error", "failed to encode response")
+		return
+	}
+	payload = append(payload, '\n')
+
+	w.Header().Set("Content-Type", "application/json")
+	if !useGzip {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+		return
+	}
+
+	// 只声明 Content-Encoding，不设 Content-Length（压缩后长度未知，交给 chunked）。
+	// 网关若把 Accept-Encoding 透传给上游却没把 Content-Encoding 透传给客户端，
+	// 客户端就会拿到不可读的 gzip 字节——这正是测试脚本要暴露的场景。
+	w.Header().Set("Content-Encoding", "gzip")
+	w.WriteHeader(http.StatusOK)
+	gz := gzip.NewWriter(w)
+	if _, err := gz.Write(payload); err != nil {
+		return
+	}
+	_ = gz.Close()
 }
 
 // writeChatStream 按 OpenAI 的 chunk 格式逐块下发，块之间留 300ms 间隔，
